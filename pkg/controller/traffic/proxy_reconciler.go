@@ -16,8 +16,20 @@ import (
 )
 
 func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffic) error {
+	if err := r.reconcileServiceAccount(instance); err != nil {
+		return errors.Wrap(err, "reconciling service account")
+	}
+
+	if err := r.reconcileRoles(instance); err != nil {
+		return errors.Wrap(err, "reconciling roles")
+	}
+
+	if err := r.reconcileRoleBinding(instance); err != nil {
+		return errors.Wrap(err, "reconciling role binding")
+	}
+
 	if err := r.reconcileProxyDeployment(instance); err != nil {
-		return errors.Wrap(err, "reconcile proxy deployment")
+		return errors.Wrap(err, "reconciling proxy deployment")
 	}
 
 	if err := r.waitForProxyDeploymentReady(instance); err != nil {
@@ -89,6 +101,10 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 									Name:  "PROXY_SERVICE",
 									Value: instance.Spec.Service,
 								},
+								{
+									Name:  "PROXY_DEPLOYMENT",
+									Value: instance.Spec.Deployment,
+								},
 							},
 						},
 					},
@@ -112,6 +128,17 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 		return err
 	}
 
+	return nil
+}
+
+func (r *ReconcileTraffic) reconcileServiceAccount(instance *autoscalerv1beta1.Traffic) error {
+	return nil
+}
+func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) error {
+	return nil
+}
+
+func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traffic) error {
 	return nil
 }
 
