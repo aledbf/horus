@@ -153,6 +153,8 @@ func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Resul
 
 func (r *ReconcileTraffic) deleteExternalDependency(instance *autoscalerv1beta1.Traffic) error {
 	log.Info("deleting the external dependencies")
+
+	//TODO: update service
 	return nil
 }
 

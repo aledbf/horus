@@ -49,6 +49,8 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 	var service *corev1.Service
 
 	labels := extractServiceLabels(service)
+	labels["kind"] = "horus-proxy"
+
 	replicas := int32(1)
 
 	deployment := &appsv1.Deployment{
@@ -57,7 +59,7 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      deploymentName.Name,
+			Name:      fmt.Sprintf("%v-horus-proxy", deploymentName.Name),
 			Namespace: deploymentName.Namespace,
 			Labels:    labels,
 		},
@@ -75,8 +77,8 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 					Containers: []corev1.Container{
 						{
 							Name:            "proxy",
-							Image:           "envoy",
-							ImagePullPolicy: corev1.PullIfNotPresent,
+							Image:           "aledbf/horus-proxy:dev",
+							ImagePullPolicy: corev1.PullAlways,
 							Ports:           extractServicePorts(service),
 							Env: []corev1.EnvVar{
 								{
@@ -160,14 +162,12 @@ func proxyDeploymentName(instance *autoscalerv1beta1.Traffic) types.NamespacedNa
 }
 
 func extractServiceLabels(svc *corev1.Service) map[string]string {
-	/*	[]corev1.ContainerPort{
-		{
-			Name:          "https",
-			ContainerPort: 8000,
-		},
-	},*/
+	labels := make(map[string]string, len(svc.Labels))
+	for k, v := range svc.Labels {
+		labels[fmt.Sprintf("%v-horus-proxy", k)] = v
+	}
 
-	return nil
+	return labels
 }
 
 func extractServicePorts(svc *corev1.Service) []corev1.ContainerPort {
