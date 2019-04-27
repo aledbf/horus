@@ -9,13 +9,17 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	controllerutil "sigs.k8s.io/controller-runtime"
 )
 
 func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffic) error {
+	fixNamespace(instance)
+
 	if err := r.reconcileServiceAccount(instance); err != nil {
 		return errors.Wrap(err, "reconciling service account")
 	}
@@ -37,7 +41,7 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 	}
 
 	if err := r.reconcileProxyService(instance); err != nil {
-		return errors.Wrap(err, "reconcile proxy service")
+		return errors.Wrap(err, "updating service")
 	}
 
 	return nil
@@ -72,7 +76,7 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%v-horus-proxy", deploymentName.Name),
-			Namespace: deploymentName.Namespace,
+			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -132,32 +136,124 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 }
 
 func (r *ReconcileTraffic) reconcileServiceAccount(instance *autoscalerv1beta1.Traffic) error {
+	foundServiceAccount := &corev1.ServiceAccount{}
+	err := r.Get(context.TODO(), types.NamespacedName{
+		Name:      toProxyName(instance.GetName()),
+		Namespace: instance.Namespace,
+	}, foundServiceAccount)
+	if err != nil && apierrors.IsNotFound(err) {
+		err := r.Create(context.TODO(), foundServiceAccount)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	if err := controllerutil.SetControllerReference(instance, foundServiceAccount, r.scheme); err != nil {
+		return err
+	}
+
 	return nil
 }
+
 func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) error {
+	foundRoles := &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "Role"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      toProxyName(instance.Spec.Service),
+			Namespace: instance.Namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"namespaces"},
+				Verbs:         []string{"get"},
+				ResourceNames: []string{instance.GetNamespace()},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"services", "endpoints"},
+				Verbs:         []string{"get", "watch", "list"},
+				ResourceNames: []string{instance.Spec.Service},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"services"},
+				Verbs:         []string{"update"},
+				ResourceNames: []string{instance.Spec.Service},
+			},
+			{
+				APIGroups:     []string{"apps"},
+				Resources:     []string{"deployments"},
+				Verbs:         []string{"get", "watch", "list"},
+				ResourceNames: []string{instance.Spec.Deployment},
+			},
+		},
+	}
+
+	err := r.Get(context.TODO(), types.NamespacedName{
+		Name:      toProxyName(instance.GetName()),
+		Namespace: instance.Namespace,
+	}, foundRoles)
+	if err != nil && apierrors.IsNotFound(err) {
+		err := r.Create(context.TODO(), foundRoles)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	if err := controllerutil.SetControllerReference(instance, foundRoles, r.scheme); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traffic) error {
+	name := toProxyName(instance.Spec.Service)
+	foundRoleBinding := &rbacv1.RoleBinding{
+		RoleRef: rbacv1.RoleRef{Name: name, APIGroup: rbacv1.GroupName},
+		Subjects: []rbacv1.Subject{
+			{Kind: "ServiceAccount", APIGroup: "", Name: name, Namespace: instance.Namespace},
+		},
+	}
+
+	err := r.Get(context.TODO(), types.NamespacedName{
+		Name:      toProxyName(instance.GetName()),
+		Namespace: instance.Namespace,
+	}, foundRoleBinding)
+	if err != nil && apierrors.IsNotFound(err) {
+		err := r.Create(context.TODO(), foundRoleBinding)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+
+	if err := controllerutil.SetControllerReference(instance, foundRoleBinding, r.scheme); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (r *ReconcileTraffic) waitForProxyDeploymentReady(instance *autoscalerv1beta1.Traffic) error {
-	abortAt := time.Now().Add(time.Minute * 2)
-	for {
-		if time.Now().After(abortAt) {
-			return errors.Wrap(fmt.Errorf("timeout waiting for proxy to be ready"), "waiting for proxy")
-		}
-
+	return wait.Poll(2*time.Second, 2*time.Minute, func() (bool, error) {
 		isReady, err := r.isProxyDeploymentReady(instance)
 		if err != nil {
-			return errors.Wrap(err, "is proxy ready")
+			return false, nil
 		}
 
 		if isReady {
-			return nil
+			return true, nil
 		}
-	}
+
+		return false, nil
+	})
 }
 
 func (r *ReconcileTraffic) isProxyDeploymentReady(instance *autoscalerv1beta1.Traffic) (bool, error) {
@@ -208,4 +304,14 @@ func extractServicePorts(svc *corev1.Service) []corev1.ContainerPort {
 	}
 
 	return ports
+}
+
+func toProxyName(name string) string {
+	return fmt.Sprintf("%v-proxy", name)
+}
+
+func fixNamespace(instance *autoscalerv1beta1.Traffic) {
+	if instance.Namespace == "" {
+		instance.Namespace = metav1.NamespaceDefault
+	}
 }

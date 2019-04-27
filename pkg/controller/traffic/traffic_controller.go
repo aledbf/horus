@@ -19,10 +19,8 @@ import (
 	"context"
 
 	autoscalerv1beta1 "github.com/aledbf/horus/pkg/apis/autoscaler/v1beta1"
-	//corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	//"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -77,41 +75,17 @@ type ReconcileTraffic struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups=autoscaler.rocket-science.io,resources=traffics,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.rocket-science.io,resources=traffics/status,verbs=get;update;patch
 func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	traffic := &autoscalerv1beta1.Traffic{}
-	err := r.Get(context.TODO(), request.NamespacedName, traffic)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
-
-		return reconcile.Result{}, err
-	}
-
-	deployment := traffic.Spec.Deployment
-	service := traffic.Spec.Service
-	minReplicas := traffic.Spec.MinReplicas
-	idleAdter := traffic.Spec.IdleAfter
-
-	log.Info("Sync deployment %v - service %v with a minimum replicas count of %v and idle after %v minutes",
-		deployment, service, minReplicas, idleAdter)
-
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling MasterService")
-
-	// Fetch the MasterService instance
 	instance := &autoscalerv1beta1.Traffic{}
-	err = r.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
+
 		return reconcile.Result{}, err
 	}
 
