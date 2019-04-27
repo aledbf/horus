@@ -11,7 +11,7 @@ COPY vendor/ vendor/
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager github.com/aledbf/horus/cmd/manager
 
 # Copy the controller-manager into a thin image
-FROM ubuntu:latest
+FROM alpine:3.9
 
 WORKDIR /
 
