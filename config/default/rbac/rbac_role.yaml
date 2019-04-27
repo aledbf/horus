@@ -12,8 +12,8 @@ rules:
   - create
   - get
   - list
-  - update
   - watch
+  - update
   - delete
 - apiGroups:
   - ""
@@ -28,11 +28,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services/status
+  - events
   verbs:
-  - get
-  - update
-  - patch
+  - create
 - apiGroups:
   - ""
   resources:
@@ -60,6 +58,7 @@ rules:
   - get
   - list
   - watch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -69,6 +68,7 @@ rules:
   - get
   - list
   - watch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -78,6 +78,7 @@ rules:
   - get
   - list
   - watch
+  - delete
 - apiGroups:
   - autoscaler.rocket-science.io
   resources:

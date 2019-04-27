@@ -87,12 +87,12 @@ type ReconcileTraffic struct {
 // Automatically generate RBAC rules
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=create;get;list;watch
 // +kubebuilder:rbac:groups="",resources=endpoints,verbs=create;get;list;watch
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create;get;list;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;get;list;watch
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;get;list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create;get;list;watch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;get;list;watch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;get;list;watch;delete
 // +kubebuilder:rbac:groups=autoscaler.rocket-science.io,resources=traffics,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaler.rocket-science.io,resources=traffics/status,verbs=get;update;patch
 func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Result, error) {
