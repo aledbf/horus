@@ -31,6 +31,14 @@ rules:
   - update
   - patch
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - autoscaler.rocket-science.io
   resources:
   - traffics
