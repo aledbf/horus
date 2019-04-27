@@ -69,7 +69,7 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 
 	replicas := int32(1)
 
-	deployment := &appsv1.Deployment{
+	foundDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apps/v1",
 			Kind:       "Deployment",
@@ -117,10 +117,9 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 		},
 	}
 
-	foundDeployment := &appsv1.Deployment{}
 	err := r.Get(context.TODO(), deploymentName, foundDeployment)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.Create(context.TODO(), deployment)
+		err := r.Create(context.TODO(), foundDeployment)
 		if err != nil {
 			return err
 		}
@@ -136,11 +135,13 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 }
 
 func (r *ReconcileTraffic) reconcileServiceAccount(instance *autoscalerv1beta1.Traffic) error {
-	foundServiceAccount := &corev1.ServiceAccount{}
-	err := r.Get(context.TODO(), types.NamespacedName{
-		Name:      toProxyName(instance.GetName()),
-		Namespace: instance.Namespace,
-	}, foundServiceAccount)
+	foundServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      toProxyName(instance.Spec.Service),
+			Namespace: instance.Namespace,
+		},
+	}
+	err := r.Get(context.TODO(), getKey(instance), foundServiceAccount)
 	if err != nil && apierrors.IsNotFound(err) {
 		err := r.Create(context.TODO(), foundServiceAccount)
 		if err != nil {
@@ -192,10 +193,7 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 		},
 	}
 
-	err := r.Get(context.TODO(), types.NamespacedName{
-		Name:      toProxyName(instance.GetName()),
-		Namespace: instance.Namespace,
-	}, foundRoles)
+	err := r.Get(context.TODO(), getKey(instance), foundRoles)
 	if err != nil && apierrors.IsNotFound(err) {
 		err := r.Create(context.TODO(), foundRoles)
 		if err != nil {
@@ -221,10 +219,7 @@ func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traf
 		},
 	}
 
-	err := r.Get(context.TODO(), types.NamespacedName{
-		Name:      toProxyName(instance.GetName()),
-		Namespace: instance.Namespace,
-	}, foundRoleBinding)
+	err := r.Get(context.TODO(), getKey(instance), foundRoleBinding)
 	if err != nil && apierrors.IsNotFound(err) {
 		err := r.Create(context.TODO(), foundRoleBinding)
 		if err != nil {
@@ -313,5 +308,12 @@ func toProxyName(name string) string {
 func fixNamespace(instance *autoscalerv1beta1.Traffic) {
 	if instance.Namespace == "" {
 		instance.Namespace = metav1.NamespaceDefault
+	}
+}
+
+func getKey(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      toProxyName(instance.GetName()),
+		Namespace: instance.Namespace,
 	}
 }
