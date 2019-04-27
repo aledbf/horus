@@ -134,9 +134,8 @@ func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Resul
 			}
 
 			r.recorder.Event(instance, "Normal", "Deleted",
-				fmt.Sprintf("Removing horus-proxy labels from service %s/%s",
+				fmt.Sprintf("Removed horus-proxy labels from service %s/%s",
 					instance.Namespace, instance.Spec.Service))
-
 		}
 
 		// Our finalizer has finished, so the reconciler can do nothing.
