@@ -3,6 +3,7 @@ package traffic
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	autoscalerv1beta1 "github.com/aledbf/horus/pkg/apis/autoscaler/v1beta1"
@@ -64,14 +65,11 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 }
 
 func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic, labels map[string]string, ports []corev1.ContainerPort) error {
-	deploymentName := typeNamespace(instance)
-
 	replicas := int32(1)
 
-	foundDeployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{APIVersion: appsv1.SchemeGroupVersion.String(), Kind: "Deployment"},
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      toProxyName(deploymentName.Name),
+			Name:      toProxyName(instance),
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
@@ -82,10 +80,10 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   deploymentName.Name,
 					Labels: labels,
 				},
 				Spec: corev1.PodSpec{
+					ServiceAccountName: toProxyName(instance),
 					Containers: []corev1.Container{
 						{
 							Name:            "proxy",
@@ -113,17 +111,25 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 		},
 	}
 
-	err := r.Get(context.TODO(), deploymentName, foundDeployment)
+	foundDeployment := &appsv1.Deployment{}
+	err := r.Get(context.TODO(), typeNamespace(instance), foundDeployment)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.Create(context.TODO(), foundDeployment)
+		err := r.Create(context.TODO(), deployment)
 		if err != nil {
 			return err
+		}
+	} else if err != nil && apierrors.IsAlreadyExists(err) {
+		if !reflect.DeepEqual(deployment, foundDeployment) {
+			err = r.Update(context.TODO(), deployment)
+			if err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err
 	}
 
-	if err := controllerutil.SetControllerReference(instance, foundDeployment, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, deployment, r.scheme); err != nil {
 		return err
 	}
 
@@ -131,23 +137,32 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 }
 
 func (r *ReconcileTraffic) reconcileServiceAccount(instance *autoscalerv1beta1.Traffic) error {
-	foundServiceAccount := &corev1.ServiceAccount{
+	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      toProxyName(instance.Spec.Service),
+			Name:      toProxyName(instance),
 			Namespace: instance.Namespace,
 		},
 	}
-	err := r.Get(context.TODO(), getKey(instance), foundServiceAccount)
+
+	foundServiceAccount := &corev1.ServiceAccount{}
+	err := r.Get(context.TODO(), typeNamespace(instance), foundServiceAccount)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.Create(context.TODO(), foundServiceAccount)
+		err := r.Create(context.TODO(), serviceAccount)
 		if err != nil {
 			return err
+		}
+	} else if err != nil && apierrors.IsAlreadyExists(err) {
+		if !reflect.DeepEqual(serviceAccount, foundServiceAccount) {
+			err = r.Update(context.TODO(), serviceAccount)
+			if err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err
 	}
 
-	if err := controllerutil.SetControllerReference(instance, foundServiceAccount, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, serviceAccount, r.scheme); err != nil {
 		return err
 	}
 
@@ -155,10 +170,10 @@ func (r *ReconcileTraffic) reconcileServiceAccount(instance *autoscalerv1beta1.T
 }
 
 func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) error {
-	foundRoles := &rbacv1.Role{
+	roles := &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "Role"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      toProxyName(instance.Spec.Service),
+			Name:      toProxyName(instance),
 			Namespace: instance.Namespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -189,17 +204,25 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 		},
 	}
 
-	err := r.Get(context.TODO(), getKey(instance), foundRoles)
+	foundRoles := &rbacv1.Role{}
+	err := r.Get(context.TODO(), typeNamespace(instance), foundRoles)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.Create(context.TODO(), foundRoles)
+		err := r.Create(context.TODO(), roles)
 		if err != nil {
 			return err
+		}
+	} else if err != nil && apierrors.IsAlreadyExists(err) {
+		if !reflect.DeepEqual(roles, foundRoles) {
+			err = r.Update(context.TODO(), roles)
+			if err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err
 	}
 
-	if err := controllerutil.SetControllerReference(instance, foundRoles, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, roles, r.scheme); err != nil {
 		return err
 	}
 
@@ -207,8 +230,8 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 }
 
 func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traffic) error {
-	name := toProxyName(instance.Spec.Service)
-	foundRoleBinding := &rbacv1.RoleBinding{
+	name := toProxyName(instance)
+	roleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: instance.Namespace,
@@ -223,17 +246,25 @@ func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traf
 		},
 	}
 
-	err := r.Get(context.TODO(), getKey(instance), foundRoleBinding)
+	foundRoleBinding := &rbacv1.RoleBinding{}
+	err := r.Get(context.TODO(), typeNamespace(instance), foundRoleBinding)
 	if err != nil && apierrors.IsNotFound(err) {
-		err := r.Create(context.TODO(), foundRoleBinding)
+		err := r.Create(context.TODO(), roleBinding)
 		if err != nil {
 			return err
+		}
+	} else if err != nil && apierrors.IsAlreadyExists(err) {
+		if !reflect.DeepEqual(roleBinding, foundRoleBinding) {
+			err = r.Update(context.TODO(), roleBinding)
+			if err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err
 	}
 
-	if err := controllerutil.SetControllerReference(instance, foundRoleBinding, r.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(instance, roleBinding, r.scheme); err != nil {
 		return err
 	}
 
@@ -271,7 +302,7 @@ func (r *ReconcileTraffic) isProxyDeploymentReady(instance *autoscalerv1beta1.Tr
 
 func typeNamespace(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
 	return types.NamespacedName{
-		Name:      instance.Spec.Service,
+		Name:      toProxyName(instance),
 		Namespace: instance.Namespace,
 	}
 }
@@ -298,19 +329,12 @@ func extractServicePorts(svc *corev1.Service) []corev1.ContainerPort {
 	return ports
 }
 
-func toProxyName(name string) string {
-	return fmt.Sprintf("%v-horus-proxy", name)
+func toProxyName(instance *autoscalerv1beta1.Traffic) string {
+	return fmt.Sprintf("%v-%v-horus-proxy", instance.Spec.Deployment, instance.Spec.Service)
 }
 
 func fixNamespace(instance *autoscalerv1beta1.Traffic) {
 	if instance.Namespace == "" {
 		instance.Namespace = metav1.NamespaceDefault
-	}
-}
-
-func getKey(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      toProxyName(instance.GetName()),
-		Namespace: instance.Namespace,
 	}
 }
