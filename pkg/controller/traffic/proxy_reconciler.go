@@ -53,8 +53,7 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 }
 
 func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Traffic) error {
-	serviceName := proxyServiceName(instance)
-
+	serviceName := typeNamespace(instance)
 	foundService := &corev1.Service{}
 	err := r.Get(context.TODO(), serviceName, foundService)
 	if err != nil {
@@ -65,14 +64,14 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 }
 
 func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic, labels map[string]string, ports []corev1.ContainerPort) error {
-	deploymentName := proxyDeploymentName(instance)
+	deploymentName := typeNamespace(instance)
 
 	replicas := int32(1)
 
 	foundDeployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{APIVersion: appsv1.SchemeGroupVersion.String(), Kind: "Deployment"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%v-horus-proxy", deploymentName.Name),
+			Name:      toProxyName(deploymentName.Name),
 			Namespace: instance.Namespace,
 			Labels:    labels,
 		},
@@ -211,7 +210,7 @@ func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traf
 	name := toProxyName(instance.Spec.Service)
 	foundRoleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      toProxyName(instance.Spec.Service),
+			Name:      name,
 			Namespace: instance.Namespace,
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -257,7 +256,7 @@ func (r *ReconcileTraffic) waitForProxyDeploymentReady(instance *autoscalerv1bet
 }
 
 func (r *ReconcileTraffic) isProxyDeploymentReady(instance *autoscalerv1beta1.Traffic) (bool, error) {
-	deploymentName := proxyDeploymentName(instance)
+	deploymentName := typeNamespace(instance)
 
 	foundDeployment := &appsv1.Deployment{}
 	err := r.Get(context.TODO(), deploymentName, foundDeployment)
@@ -270,16 +269,9 @@ func (r *ReconcileTraffic) isProxyDeploymentReady(instance *autoscalerv1beta1.Tr
 	return foundDeployment.Status.AvailableReplicas > 0, nil
 }
 
-func proxyServiceName(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
+func typeNamespace(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
 	return types.NamespacedName{
 		Name:      instance.Spec.Service,
-		Namespace: instance.Namespace,
-	}
-}
-
-func proxyDeploymentName(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      fmt.Sprintf("%v-proxy", instance.Spec.Deployment),
 		Namespace: instance.Namespace,
 	}
 }
@@ -307,7 +299,7 @@ func extractServicePorts(svc *corev1.Service) []corev1.ContainerPort {
 }
 
 func toProxyName(name string) string {
-	return fmt.Sprintf("%v-proxy", name)
+	return fmt.Sprintf("%v-horus-proxy", name)
 }
 
 func fixNamespace(instance *autoscalerv1beta1.Traffic) {
