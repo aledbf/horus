@@ -18,6 +18,11 @@ import (
 	controllerutil "sigs.k8s.io/controller-runtime"
 )
 
+const (
+	handledByLabelName  = "handled-by"
+	handledByLabelValue = "horus-proxy"
+)
+
 func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffic, service *corev1.Service) error {
 	fixNamespace(instance)
 
@@ -33,8 +38,8 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 		return errors.Wrap(err, "reconciling role binding")
 	}
 
-	labels := extractServiceLabels(service)
-	labels["kind"] = "horus-proxy"
+	labels := service.Labels
+	labels[handledByLabelName] = handledByLabelValue
 
 	ports := extractServicePorts(service)
 
@@ -46,19 +51,27 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 		return errors.Wrap(err, "waiting for proxy deployment to be ready")
 	}
 
-	if err := r.reconcileProxyService(instance); err != nil {
+	if err := r.reconcileProxyService(instance, labels); err != nil {
 		return errors.Wrap(err, "updating service")
 	}
 
 	return nil
 }
 
-func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Traffic) error {
-	serviceName := typeNamespace(instance)
+func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Traffic, labels map[string]string) error {
 	foundService := &corev1.Service{}
-	err := r.Get(context.TODO(), serviceName, foundService)
+	err := r.Get(context.TODO(), types.NamespacedName{
+		Name:      instance.Spec.Service,
+		Namespace: instance.Namespace,
+	}, foundService)
 	if err != nil {
 		return errors.Wrap(err, "get service")
+	}
+
+	foundService.Spec.Selector = labels
+	err = r.Update(context.TODO(), foundService)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -305,15 +318,6 @@ func typeNamespace(instance *autoscalerv1beta1.Traffic) types.NamespacedName {
 		Name:      toProxyName(instance),
 		Namespace: instance.Namespace,
 	}
-}
-
-func extractServiceLabels(svc *corev1.Service) map[string]string {
-	labels := make(map[string]string, len(svc.Labels))
-	for k, v := range svc.Labels {
-		labels[fmt.Sprintf("%v-horus-proxy", k)] = v
-	}
-
-	return labels
 }
 
 func extractServicePorts(svc *corev1.Service) []corev1.ContainerPort {

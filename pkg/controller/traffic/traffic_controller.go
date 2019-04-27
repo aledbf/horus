@@ -74,7 +74,7 @@ type ReconcileTraffic struct {
 // and what is in the Traffic.Spec
 //
 // Automatically generate RBAC rules
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch;update
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=create;get;list;watch
@@ -143,6 +143,24 @@ func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Resul
 
 func (r *ReconcileTraffic) deleteExternalDependency(instance *autoscalerv1beta1.Traffic) error {
 	log.Info("deleting the external dependencies")
+
+	foundService := &corev1.Service{}
+	err := r.Get(context.TODO(), types.NamespacedName{
+		Name:      instance.Spec.Service,
+		Namespace: instance.Namespace,
+	}, foundService)
+	if err != nil {
+		return err
+	}
+
+	if kind, ok := foundService.Spec.Selector[handledByLabelName]; ok && kind == handledByLabelValue {
+		delete(foundService.Spec.Selector, handledByLabelName)
+		err = r.Update(context.TODO(), foundService)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
