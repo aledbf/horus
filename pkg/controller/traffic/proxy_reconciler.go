@@ -70,10 +70,7 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 	replicas := int32(1)
 
 	foundDeployment := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
+		TypeMeta: metav1.TypeMeta{APIVersion: appsv1.SchemeGroupVersion.String(), Kind: "Deployment"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%v-horus-proxy", deploymentName.Name),
 			Namespace: instance.Namespace,
@@ -213,9 +210,14 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traffic) error {
 	name := toProxyName(instance.Spec.Service)
 	foundRoleBinding := &rbacv1.RoleBinding{
-		RoleRef: rbacv1.RoleRef{Name: name, APIGroup: rbacv1.GroupName},
+		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "RoleBinding"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      toProxyName(instance.Spec.Service),
+			Namespace: instance.Namespace,
+		},
+		RoleRef: rbacv1.RoleRef{Name: name, APIGroup: rbacv1.GroupName, Kind: "Role"},
 		Subjects: []rbacv1.Subject{
-			{Kind: "ServiceAccount", APIGroup: "", Name: name, Namespace: instance.Namespace},
+			{Kind: "ServiceAccount", APIGroup: corev1.SchemeGroupVersion.String(), Name: name, Namespace: instance.Namespace},
 		},
 	}
 
