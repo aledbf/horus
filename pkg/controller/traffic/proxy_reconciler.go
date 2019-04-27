@@ -58,7 +58,8 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 	return nil
 }
 
-func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Traffic, labels map[string]string) error {
+func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Traffic,
+	labels map[string]string) error {
 	foundService := &corev1.Service{}
 	err := r.Get(context.TODO(), types.NamespacedName{
 		Name:      instance.Spec.Service,
@@ -67,6 +68,14 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 	if err != nil {
 		return errors.Wrap(err, "get service")
 	}
+
+	if reflect.DeepEqual(foundService.Spec.Selector, labels) {
+		return nil
+	}
+
+	r.recorder.Event(instance, "Normal", "Updated",
+		fmt.Sprintf("Updated service %s/%s labels to use horus-proxy",
+			instance.Namespace, instance.Spec.Service))
 
 	foundService.Spec.Selector = labels
 	err = r.Update(context.TODO(), foundService)
@@ -77,7 +86,8 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 	return nil
 }
 
-func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic, labels map[string]string, ports []corev1.ContainerPort) error {
+func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic,
+	labels map[string]string, ports []corev1.ContainerPort) error {
 	replicas := int32(1)
 
 	deployment := &appsv1.Deployment{
@@ -131,6 +141,11 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 		if err != nil {
 			return err
 		}
+
+		r.recorder.Event(instance, "Normal", "Created",
+			fmt.Sprintf("New horus-proxy deployment for traffic deployment %s and service %s in namespace %s",
+				instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
+
 	} else if err != nil && apierrors.IsAlreadyExists(err) {
 		if !reflect.DeepEqual(deployment, foundDeployment) {
 			err = r.Update(context.TODO(), deployment)

@@ -17,12 +17,17 @@ package traffic
 
 import (
 	"context"
+	"fmt"
 
 	autoscalerv1beta1 "github.com/aledbf/horus/pkg/apis/autoscaler/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,7 +47,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileTraffic{Client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileTraffic{
+		Client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		recorder: mgr.GetRecorder("traffic-controller"),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -68,6 +77,8 @@ var _ reconcile.Reconciler = &ReconcileTraffic{}
 type ReconcileTraffic struct {
 	client.Client
 	scheme *runtime.Scheme
+
+	recorder record.EventRecorder
 }
 
 // Reconcile reads that state of the cluster for a Traffic object and makes changes based on the state read
@@ -121,6 +132,11 @@ func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Resul
 			if err := r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
+
+			r.recorder.Event(instance, "Normal", "Deleted",
+				fmt.Sprintf("Removing horus-proxy labels from service %s/%s",
+					instance.Namespace, instance.Spec.Service))
+
 		}
 
 		// Our finalizer has finished, so the reconciler can do nothing.
@@ -159,6 +175,64 @@ func (r *ReconcileTraffic) deleteExternalDependency(instance *autoscalerv1beta1.
 		if err != nil {
 			return err
 		}
+
+		r.recorder.Event(instance, "Normal", "Updated",
+			fmt.Sprintf("Updated service %v/%v selector to remove horus-proxy",
+				instance.Namespace, instance.Spec.Service))
+	}
+
+	key := typeNamespace(instance)
+
+	err = r.deleteResource(key, &appsv1.Deployment{})
+	if err != nil {
+		return err
+	}
+
+	r.recorder.Event(instance, "Normal", "Deleted",
+		fmt.Sprintf("Removed horus-proxy deployment for deployment %s and service %s in namespace %s",
+			instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
+
+	err = r.deleteResource(key, &rbacv1.RoleBinding{})
+	if err != nil {
+		return err
+	}
+
+	r.recorder.Event(instance, "Normal", "Deleted",
+		fmt.Sprintf("Removed horus-proxy role binding for deployment %s and service %s in namespace %s",
+			instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
+
+	err = r.deleteResource(key, &rbacv1.Role{})
+	if err != nil {
+		return err
+	}
+
+	r.recorder.Event(instance, "Normal", "Deleted",
+		fmt.Sprintf("Removed horus-proxy role for deployment %s and service %s in namespace %s",
+			instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
+
+	err = r.deleteResource(key, &corev1.ServiceAccount{})
+	if err != nil {
+		return err
+	}
+
+	r.recorder.Event(instance, "Normal", "Deleted",
+		fmt.Sprintf("Removed horus-proxy service account for deployment %s and service %s in namespace %s",
+			instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
+
+	return nil
+}
+
+func (r *ReconcileTraffic) deleteResource(key types.NamespacedName, obj runtime.Object) error {
+	err := r.Get(context.TODO(), key, obj)
+	if err != nil && apierrors.IsNotFound(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	err = r.Delete(context.TODO(), obj)
+	if err != nil {
+		return err
 	}
 
 	return nil
