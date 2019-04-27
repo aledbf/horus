@@ -74,7 +74,7 @@ type ReconcileTraffic struct {
 // and what is in the Traffic.Spec
 //
 // Automatically generate RBAC rules
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch;update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch;update;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=create;get;list;watch
