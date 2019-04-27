@@ -19,8 +19,10 @@ import (
 	"context"
 
 	autoscalerv1beta1 "github.com/aledbf/horus/pkg/apis/autoscaler/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -72,7 +74,7 @@ type ReconcileTraffic struct {
 // and what is in the Traffic.Spec
 //
 // Automatically generate RBAC rules
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=create;get;list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=create;get;list;watch
@@ -125,7 +127,16 @@ func (r *ReconcileTraffic) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{}, nil
 	}
 
-	err = r.ensureProxyRunning(instance)
+	service := &corev1.Service{}
+	err = r.Get(context.TODO(), types.NamespacedName{
+		Name:      instance.Spec.Service,
+		Namespace: instance.Namespace,
+	}, service)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	err = r.ensureProxyRunning(instance, service)
 	return reconcile.Result{}, err
 }
 

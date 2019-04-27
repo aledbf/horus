@@ -17,7 +17,7 @@ import (
 	controllerutil "sigs.k8s.io/controller-runtime"
 )
 
-func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffic) error {
+func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffic, service *corev1.Service) error {
 	fixNamespace(instance)
 
 	if err := r.reconcileServiceAccount(instance); err != nil {
@@ -32,7 +32,12 @@ func (r *ReconcileTraffic) ensureProxyRunning(instance *autoscalerv1beta1.Traffi
 		return errors.Wrap(err, "reconciling role binding")
 	}
 
-	if err := r.reconcileProxyDeployment(instance); err != nil {
+	labels := extractServiceLabels(service)
+	labels["kind"] = "horus-proxy"
+
+	ports := extractServicePorts(service)
+
+	if err := r.reconcileProxyDeployment(instance, labels, ports); err != nil {
 		return errors.Wrap(err, "reconciling proxy deployment")
 	}
 
@@ -59,13 +64,8 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 	return nil
 }
 
-func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic) error {
+func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic, labels map[string]string, ports []corev1.ContainerPort) error {
 	deploymentName := proxyDeploymentName(instance)
-
-	var service *corev1.Service
-
-	labels := extractServiceLabels(service)
-	labels["kind"] = "horus-proxy"
 
 	replicas := int32(1)
 
@@ -92,7 +92,7 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 							Name:            "proxy",
 							Image:           "aledbf/horus-proxy:dev",
 							ImagePullPolicy: corev1.PullAlways,
-							Ports:           extractServicePorts(service),
+							Ports:           ports,
 							Env: []corev1.EnvVar{
 								{
 									Name:  "PROXY_NAMESPACE",
@@ -210,14 +210,17 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 func (r *ReconcileTraffic) reconcileRoleBinding(instance *autoscalerv1beta1.Traffic) error {
 	name := toProxyName(instance.Spec.Service)
 	foundRoleBinding := &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{APIVersion: rbacv1.SchemeGroupVersion.String(), Kind: "RoleBinding"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      toProxyName(instance.Spec.Service),
 			Namespace: instance.Namespace,
 		},
-		RoleRef: rbacv1.RoleRef{Name: name, APIGroup: rbacv1.GroupName, Kind: "Role"},
+		RoleRef: rbacv1.RoleRef{
+			Name: name, APIGroup: rbacv1.GroupName, Kind: "Role",
+		},
 		Subjects: []rbacv1.Subject{
-			{Kind: "ServiceAccount", APIGroup: corev1.SchemeGroupVersion.String(), Name: name, Namespace: instance.Namespace},
+			{
+				Name: name, Namespace: instance.Namespace, APIGroup: corev1.GroupName, Kind: "ServiceAccount",
+			},
 		},
 	}
 
