@@ -17,9 +17,16 @@ package validating
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	autoscalerv1beta1 "github.com/aledbf/horus/pkg/apis/autoscaler/v1beta1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apitypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/inject"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission/types"
@@ -35,18 +42,67 @@ func init() {
 
 // TrafficCreateUpdateHandler handles Traffic
 type TrafficCreateUpdateHandler struct {
-	// To use the client, you need to do the following:
-	// - uncomment it
-	// - import sigs.k8s.io/controller-runtime/pkg/client
-	// - uncomment the InjectClient method at the bottom of this file.
-	// Client  client.Client
+	Client client.Client
 
 	// Decoder decodes objects
 	Decoder types.Decoder
 }
 
 func (h *TrafficCreateUpdateHandler) validatingTrafficFn(ctx context.Context, obj *autoscalerv1beta1.Traffic) (bool, string, error) {
-	// TODO(user): implement your admission logic
+	if obj.Namespace == "" {
+		obj.Namespace = metav1.NamespaceDefault
+	}
+
+	deployment := &appsv1.Deployment{}
+	err := h.Client.Get(context.Background(), apitypes.NamespacedName{
+		Name:      obj.Spec.Deployment,
+		Namespace: obj.Namespace,
+	}, deployment)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, fmt.Sprintf("deployment %v/%v does not exists", obj.Namespace, obj.Spec.Deployment), nil
+		}
+
+		return false, "unexpected error", err
+	}
+
+	service := &corev1.Service{}
+	err = h.Client.Get(context.Background(), apitypes.NamespacedName{
+		Name:      obj.Spec.Service,
+		Namespace: obj.Namespace,
+	}, service)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, fmt.Sprintf("service %v/%v does not exists", obj.Namespace, obj.Spec.Service), nil
+		}
+
+		return false, "unexpected error", err
+	}
+
+	trafficList := &autoscalerv1beta1.TrafficList{}
+	err = h.Client.List(context.Background(), &client.ListOptions{
+		Namespace: obj.Namespace,
+	}, trafficList)
+	if err != nil {
+		return false, "unexpected error", err
+
+	}
+
+	for _, traffic := range trafficList.Items {
+		if traffic.Name == obj.Name {
+			continue
+		}
+
+		if traffic.Spec.Deployment == traffic.Spec.Deployment &&
+			traffic.Spec.Service == traffic.Spec.Service {
+			return false, "Already exist a definition for the same deployment and service", nil
+		}
+
+		if traffic.Spec.Service == traffic.Spec.Service {
+			return false, fmt.Sprintf("Already exist a definition using the service %v (%v)", obj.Spec.Service, traffic.Name), nil
+		}
+	}
+
 	return true, "allowed to be admitted", nil
 }
 
@@ -68,13 +124,13 @@ func (h *TrafficCreateUpdateHandler) Handle(ctx context.Context, req types.Reque
 	return admission.ValidationResponse(allowed, reason)
 }
 
-//var _ inject.Client = &TrafficCreateUpdateHandler{}
-//
-//// InjectClient injects the client into the TrafficCreateUpdateHandler
-//func (h *TrafficCreateUpdateHandler) InjectClient(c client.Client) error {
-//	h.Client = c
-//	return nil
-//}
+var _ inject.Client = &TrafficCreateUpdateHandler{}
+
+// InjectClient injects the client into the TrafficCreateUpdateHandler
+func (h *TrafficCreateUpdateHandler) InjectClient(c client.Client) error {
+	h.Client = c
+	return nil
+}
 
 var _ inject.Decoder = &TrafficCreateUpdateHandler{}
 
