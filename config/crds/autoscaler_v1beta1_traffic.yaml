@@ -35,8 +35,7 @@ spec:
             idleAfter:
               description: IdleAfter defines the duration without traffic after which
                 we consider the deployment should be scaled to zero
-              format: int64
-              type: integer
+              type: string
             minReplicas:
               description: MinReplicas minimum number of replicas to scale to when
                 the service  is activated

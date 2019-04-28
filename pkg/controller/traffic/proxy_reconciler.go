@@ -77,6 +77,7 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 		fmt.Sprintf("Updated service %s/%s labels to use horus-proxy",
 			instance.Namespace, instance.Spec.Service))
 
+	foundService.Labels[handledByLabelName] = handledByLabelValue
 	foundService.Spec.Selector = labels
 	err = r.Update(context.TODO(), foundService)
 	if err != nil {
@@ -89,6 +90,11 @@ func (r *ReconcileTraffic) reconcileProxyService(instance *autoscalerv1beta1.Tra
 func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.Traffic,
 	labels map[string]string, ports []corev1.ContainerPort) error {
 	replicas := int32(1)
+
+	idleAfter := "90s"
+	if instance.Spec.IdleAfter != nil {
+		idleAfter = instance.Spec.IdleAfter.Duration.String()
+	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -125,6 +131,10 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 								{
 									Name:  "PROXY_DEPLOYMENT",
 									Value: instance.Spec.Deployment,
+								},
+								{
+									Name:  "IDLE_AFTER",
+									Value: idleAfter,
 								},
 							},
 						},
@@ -213,9 +223,15 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 			},
 			{
 				APIGroups:     []string{""},
-				Resources:     []string{"services", "endpoints"},
+				Resources:     []string{"services"},
 				Verbs:         []string{"get", "watch", "list"},
-				ResourceNames: []string{instance.Spec.Service},
+				ResourceNames: []string{},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"pods"},
+				Verbs:         []string{"get", "watch", "list"},
+				ResourceNames: []string{},
 			},
 			{
 				APIGroups:     []string{""},
@@ -226,8 +242,8 @@ func (r *ReconcileTraffic) reconcileRoles(instance *autoscalerv1beta1.Traffic) e
 			{
 				APIGroups:     []string{"apps"},
 				Resources:     []string{"deployments"},
-				Verbs:         []string{"get", "watch", "list"},
-				ResourceNames: []string{instance.Spec.Deployment},
+				Verbs:         []string{"get", "watch", "list", "update"},
+				ResourceNames: []string{},
 			},
 		},
 	}

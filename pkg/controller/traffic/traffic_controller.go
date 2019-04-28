@@ -89,7 +89,7 @@ type ReconcileTraffic struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=create;get;list;watch
-// +kubebuilder:rbac:groups="",resources=endpoints,verbs=create;get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=create;get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=create;get;list;watch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=create;get;list;watch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=create;get;list;watch;delete
@@ -170,6 +170,8 @@ func (r *ReconcileTraffic) deleteExternalDependency(instance *autoscalerv1beta1.
 
 	if kind, ok := foundService.Spec.Selector[handledByLabelName]; ok && kind == handledByLabelValue {
 		delete(foundService.Spec.Selector, handledByLabelName)
+		delete(foundService.Labels, handledByLabelName)
+
 		err = r.Update(context.TODO(), foundService)
 		if err != nil {
 			return err
