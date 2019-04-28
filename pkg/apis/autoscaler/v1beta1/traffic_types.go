@@ -16,8 +16,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"time"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -35,7 +33,7 @@ type TrafficSpec struct {
 
 	// IdleAfter defines the duration without traffic after which we consider
 	// the deployment should be scaled to zero
-	IdleAfter *time.Duration `json:"idleAfter,omitempty"`
+	IdleAfter *metav1.Duration `json:"idleAfter,omitempty"`
 }
 
 // TrafficStatus defines the observed state of Traffic

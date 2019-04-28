@@ -19,8 +19,7 @@ limitations under the License.
 package v1beta1
 
 import (
-	time "time"
-
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -95,7 +94,7 @@ func (in *TrafficSpec) DeepCopyInto(out *TrafficSpec) {
 	}
 	if in.IdleAfter != nil {
 		in, out := &in.IdleAfter, &out.IdleAfter
-		*out = new(time.Duration)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	return
