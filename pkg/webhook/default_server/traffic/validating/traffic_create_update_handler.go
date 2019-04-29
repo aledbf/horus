@@ -93,12 +93,12 @@ func (h *TrafficCreateUpdateHandler) validatingTrafficFn(ctx context.Context, ob
 			continue
 		}
 
-		if traffic.Spec.Deployment == traffic.Spec.Deployment &&
-			traffic.Spec.Service == traffic.Spec.Service {
+		if traffic.Spec.Deployment == obj.Spec.Deployment &&
+			traffic.Spec.Service == obj.Spec.Service {
 			return false, "Already exist a definition for the same deployment and service", nil
 		}
 
-		if traffic.Spec.Service == traffic.Spec.Service {
+		if traffic.Spec.Service == obj.Spec.Service {
 			return false, fmt.Sprintf("Already exist a definition using the service %v (%v)", obj.Spec.Service, traffic.Name), nil
 		}
 	}
