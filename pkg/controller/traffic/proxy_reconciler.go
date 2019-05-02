@@ -156,15 +156,16 @@ func (r *ReconcileTraffic) reconcileProxyDeployment(instance *autoscalerv1beta1.
 			fmt.Sprintf("New horus-proxy deployment for traffic deployment %s and service %s in namespace %s",
 				instance.Spec.Deployment, instance.Spec.Service, instance.Namespace))
 
-	} else if err != nil && apierrors.IsAlreadyExists(err) {
-		if !reflect.DeepEqual(deployment, foundDeployment) {
-			err = r.Update(context.TODO(), deployment)
-			if err != nil {
-				return err
-			}
-		}
-	} else if err != nil {
+	}
+	if err != nil {
 		return err
+	}
+
+	if !reflect.DeepEqual(deployment.Spec, foundDeployment.Spec) {
+		err = r.Update(context.TODO(), deployment)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := controllerutil.SetControllerReference(instance, deployment, r.scheme); err != nil {
